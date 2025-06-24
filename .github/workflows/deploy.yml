@@ -23,7 +23,7 @@ jobs:
           target: "/var/www/html/clh-backend"
           overwrite: true
           strip_components: 0
-          tar_exclude: ".git"
+          tar_exec: tar --exclude=".git" -czf
 
       - name: 🖥️ SSH into EC2 and start backend with PM2
         uses: appleboy/ssh-action@v1.0.3
@@ -33,25 +33,14 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
           script: |
-            set -e
-
-            echo "📁 Moving to project directory"
             cd /var/www/html/clh-backend
 
-            echo "🔧 Installing Node.js if needed"
-            if ! command -v node >/dev/null 2>&1; then
-              curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
-              sudo dnf install -y nodejs || sudo yum install -y nodejs
-            fi
-
-            echo "📦 Installing PM2"
+            echo "🔧 Installing PM2 globally"
             sudo npm install -g pm2
 
-            echo "📦 Installing project dependencies"
+            echo "📦 Installing dependencies"
             npm install
 
-            echo "🚀 Restarting backend with PM2"
+            echo "🚀 Restarting backend using PM2"
             pm2 stop clh-backend || true
             pm2 start index.js --name clh-backend --watch
-
-            echo "✅ Deployment completed to /var/www/html/clh-backend"
