@@ -48,16 +48,24 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-          # Install Node.js and pm2 if not already installed
+          # Ensure Node.js is installed
           if ! command -v node &> /dev/null; then
+            curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
             sudo yum install -y nodejs || sudo apt install -y nodejs
           fi
 
+          # Install pm2 globally if not present
           if ! command -v pm2 &> /dev/null; then
             sudo npm install -g pm2
           fi
 
-          # Restart Django app with pm2
+          # Optional: Collect static files (if needed)
+          # python manage.py collectstatic --noinput
+
+          # Optional: Run migrations (if needed)
+          # python manage.py migrate
+
+          # Restart Django app using pm2
           pm2 delete django-app || true
           pm2 start manage.py --name django-app --interpreter ./venv/bin/python3.11 -- runserver 0.0.0.0:8000
           pm2 save
