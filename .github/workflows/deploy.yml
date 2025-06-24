@@ -30,7 +30,7 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         port: 22
         script: |
-          # Move to correct location with sudo
+          # Move project to correct location
           sudo rm -rf /var/www/html/clh
           sudo mv /home/${{ secrets.EC2_USERNAME }}/clh /var/www/html/clh
 
@@ -38,18 +38,26 @@ jobs:
           sudo chown -R $USER:$USER /var/www/html
           sudo chmod -R 777 /var/www/html
 
-          # Navigate to project directory
           cd /var/www/html/clh
 
-          # Create and activate virtual environment
-          python3 -m venv venv
+          # Use Python 3.11 to create virtual environment
+          python3.11 -m venv venv
           source venv/bin/activate
 
           # Upgrade pip and install requirements
           pip install --upgrade pip
           pip install -r requirements.txt
 
+          # Install Node.js and pm2 if not already installed
+          if ! command -v node &> /dev/null; then
+            sudo yum install -y nodejs || sudo apt install -y nodejs
+          fi
 
-          # Start Django with pm2 in background
-          pm2 start manage.py --name django-app --interpreter ./venv/bin/python3 -- runserver 0.0.0.0:8000
+          if ! command -v pm2 &> /dev/null; then
+            sudo npm install -g pm2
+          fi
+
+          # Restart Django app with pm2
+          pm2 delete django-app || true
+          pm2 start manage.py --name django-app --interpreter ./venv/bin/python3.11 -- runserver 0.0.0.0:8000
           pm2 save
