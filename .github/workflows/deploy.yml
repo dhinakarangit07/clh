@@ -1,4 +1,4 @@
-name: 🚀 Deploy Django App to Server
+name: 🚀 Deploy Django App to EC2
 
 on:
   push:
@@ -20,10 +20,9 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         port: 22
         source: "."
-        target: "/var/www/html/${{ github.event.repository.name }}"
-        rm: true
+        target: "/home/${{ secrets.EC2_USERNAME }}/clh"
 
-    - name: 🚀 Deploy and Setup on EC2
+    - name: 🚀 Setup and Run Django on EC2
       uses: appleboy/ssh-action@v0.1.10
       with:
         host: ${{ secrets.EC2_HOST }}
@@ -31,19 +30,28 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         port: 22
         script: |
-          cd /var/www/html/${{ github.event.repository.name }}
-          chmod -R 777 .
-          chown -R $USER:$USER .
+          # Move to correct location with sudo
+          sudo rm -rf /var/www/html/clh
+          sudo mv /home/${{ secrets.EC2_USERNAME }}/clh /var/www/html/clh
 
-          # Setup virtual environment
+          # Set permissions and ownership
+          sudo chown -R $USER:$USER /var/www/html
+          sudo chmod -R 777 /var/www/html
+
+          # Navigate to project directory
+          cd /var/www/html/clh
+
+          # Create and activate virtual environment
           python3 -m venv venv
           source venv/bin/activate
 
-          # Install dependencies
+          # Upgrade pip and install requirements
           pip install --upgrade pip
           pip install -r requirements.txt
 
-          # Run Django app with pm2
-          pm2 delete django-app || true  # remove if already running
-          pm2 start manage.py --name django-app --interpreter venv/bin/python3 -- runserver 0.0.0.0:8000
+          # Kill existing pm2 process if exists
+          pm2 delete django-app || true
+
+          # Start Django with pm2 in background
+          pm2 start manage.py --name django-app --interpreter ./venv/bin/python3 -- runserver 0.0.0.0:8000
           pm2 save
