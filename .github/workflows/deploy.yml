@@ -12,7 +12,19 @@ jobs:
     - name: 📥 Checkout Code
       uses: actions/checkout@v4
 
-    - name: 📤 Copy files to EC2
+    - name: 🛡️ Set Write Permissions for /var/www/html
+      uses: appleboy/ssh-action@v0.1.10
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        port: 22
+        script: |
+          # Allow your user to write into /var/www/html
+          sudo chown -R $USER:$USER /var/www/html
+          sudo chmod -R 777 /var/www/html
+
+    - name: 📤 Copy Project to EC2 (Directly to /var/www/html/clh)
       uses: appleboy/scp-action@v0.1.4
       with:
         host: ${{ secrets.EC2_HOST }}
@@ -30,31 +42,24 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         port: 22
         script: |
-          # Go to project directory
           cd /var/www/html/clh
 
-          # Install required packages
+          # Install Python, Node.js, Nginx
           sudo apt update -y
           sudo apt install -y python3.11 python3.11-venv nginx nodejs npm
 
-          # Set permissions
-          sudo chown -R $USER:$USER /var/www/html/clh
-          sudo chmod -R 755 /var/www/html/clh
-
-          # Create virtual environment and activate
+          # Setup virtualenv
           python3.11 -m venv venv
           source venv/bin/activate
-
-          # Install Python dependencies
           pip install --upgrade pip
           pip install -r requirements.txt
 
-          # Ensure PM2 is installed
+          # Install pm2
           sudo npm install -g pm2
 
-          # Run Django using PM2
+          # Start Django with pm2
           pm2 delete django-app || true
           pm2 start manage.py --name django-app --interpreter ./venv/bin/python3.11 -- runserver 127.0.0.1:8000
           pm2 save
 
-
+         
