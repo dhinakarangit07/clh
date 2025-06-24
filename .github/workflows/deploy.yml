@@ -31,29 +31,19 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
           script: |
-            # Ensure destination folder exists
             sudo mkdir -p /var/www/html/dist
-
-            # Remove old backend files
             sudo rm -rf /var/www/html/dist/*
-
-            # Copy the latest backend from user's home
             sudo cp -r /home/${{ secrets.EC2_USERNAME }}/clh-backend/* /var/www/html/dist/
-
-            # Set appropriate permissions
             sudo chown -R ec2-user:ec2-user /var/www/html/dist
             sudo chmod -R 755 /var/www/html/dist
-
-            # Navigate to backend directory
+            
             cd /var/www/html/dist
-
-            # Optional: Set up Python venv and install requirements
+            
+            # Use Python 3.11 (default in Amazon Linux 2023)
             python3 -m venv venv
-            source venv/bin/activate
-            pip install -r requirements.txt
-
-            # Kill old process (adjust for Gunicorn/Uvicorn/Flask etc.)
+            ./venv/bin/pip install --upgrade pip
+            ./venv/bin/pip install -r requirements.txt
+            
+            # Restart backend server
             pkill -f gunicorn || true
-
-            # Start backend server (example with Gunicorn)
-            nohup gunicorn app:app --bind 0.0.0.0:8000 --daemon
+            nohup ./venv/bin/gunicorn app:app --bind 0.0.0.0:8000 --daemon
