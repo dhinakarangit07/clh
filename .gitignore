@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.so
+
+# Django
+*.log
+*.pot
+*.pyc
+local_settings.py
+db.sqlite3
+instance/
+.env
+.env.*
+
+# Media and Static (optional if generated or user-uploaded)
+media/
+staticfiles/
+
+# VS Code
+.vscode/
+
+# MacOS
+.DS_Store
+
+# PyCharm
+.idea/
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+
+# Migrations (optional if auto-generated and shouldn't be versioned)
+**/migrations/*.py
+!**/migrations/__init__.py
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+
+# Test-related
+.cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+test-output/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+
+# Pytest
+.pytest_cache/
+
+# System Files
+Thumbs.db
+desktop.ini
+.env
+.env

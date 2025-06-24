@@ -1,0 +1,12 @@
+Django>=5.2,<5.3
+wagtail>=7.0,<7.1
+djangorestframework 
+djangorestframework-simplejwt
+django-cors-headers
+mysqlclient  
+python-dateutil
+webdriver-manager
+selenium
+reportlab
+pytz
+django-user-agents
