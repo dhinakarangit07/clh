@@ -9,13 +9,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout Code
+      - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: 🐍 Setup Python
+      - name: 🐍 Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: '3.10'
 
       - name: 📦 Install dependencies
         run: |
@@ -23,19 +23,20 @@ jobs:
           source venv/bin/activate
           pip install -r requirements.txt
 
-      - name: 🚀 Upload Django Project to EC2
+      - name: 📤 Copy backend files to EC2
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
-          source: "./*"
+          source: "."  # copy entire repo
           target: "/home/${{ secrets.EC2_USERNAME }}/clh-backend"
-          overwrite: true
+          rm: true
+          strip_components: 0
           debug: true
 
-      - name: 🔧 SSH into EC2 and Restart Backend Services
+      - name: 🖥️ SSH into EC2 to restart backend
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -46,7 +47,4 @@ jobs:
             cd /home/${{ secrets.EC2_USERNAME }}/clh-backend
             source venv/bin/activate || python3 -m venv venv && source venv/bin/activate
             pip install -r requirements.txt
-            python manage.py migrate
-            python manage.py collectstatic --noinput
-            sudo systemctl restart gunicorn
-            sudo systemctl restart nginx
+            python manage.py m
