@@ -1,4 +1,4 @@
-name: Backend CI/CD to EC2
+name: 🚀 Deploy Django App to Server
 
 on:
   push:
@@ -9,38 +9,41 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout Code
-        uses: actions/checkout@v4
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
 
-      - name: 📤 Copy backend to EC2 (excluding .git)
-        uses: appleboy/scp-action@v0.1.4
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
-          source: "./"
-          target: "/var/www/html/clh-backend"
-          overwrite: true
-          strip_components: 0
-          tar_exec: tar --exclude=".git" -czf
+    - name: 📤 Copy files to EC2
+      uses: appleboy/scp-action@v0.1.4
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: 22
+        source: "."
+        target: "/var/www/html/${{ github.event.repository.name }}"
+        rm: true
 
-      - name: 🖥️ SSH into EC2 and start backend with PM2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
-          script: |
-            cd /var/www/html/clh-backend
+    - name: 🚀 Deploy and Setup on EC2
+      uses: appleboy/ssh-action@v0.1.10
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        port: 22
+        script: |
+          cd /var/www/html/${{ github.event.repository.name }}
+          chmod -R 777 .
+          chown -R $USER:$USER .
 
-            echo "🔧 Installing PM2 globally"
-            sudo npm install -g pm2
+          # Setup virtual environment
+          python3 -m venv venv
+          source venv/bin/activate
 
-            echo "📦 Installing dependencies"
-            npm install
+          # Install dependencies
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
-            echo "🚀 Restarting backend using PM2"
-            pm2 stop clh-backend || true
-            pm2 start index.js --name clh-backend --watch
+          # Run Django app with pm2
+          pm2 delete django-app || true  # remove if already running
+          pm2 start manage.py --name django-app --interpreter venv/bin/python3 -- runserver 0.0.0.0:8000
+          pm2 save
