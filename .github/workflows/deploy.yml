@@ -23,40 +23,22 @@ jobs:
           source venv/bin/activate
           pip install -r requirements.txt
 
-      - name: 📤 Copy dist/ to EC2
-        uses: appleboy/scp-action@v0.1.4
+      - name: 🚀 Copy clh-backend to /var/www/html/dist/
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
-          source: "dist/*"
-          target: "/home/${{ secrets.EC2_USERNAME }}/frontend-temp"
-          strip_components: 0
-          overwrite: true
+           host: ${{ secrets.EC2_HOST }}
+           username: ${{ secrets.EC2_USERNAME }}
+           key: ${{ secrets.EC2_SSH_KEY }}
+           port: 22
+           script: |
+            # Make sure the destination path exists
+              sudo mkdir -p /var/www/html/dist
 
+            # Clean the existing contents
+               sudo rm -rf /var/www/html/dist/*
 
-      - name: 📤 Copy dist/ to EC2
-        uses: appleboy/scp-action@v0.1.4
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
-          source: "dist/*"
-          target: "/home/${{ secrets.EC2_USERNAME }}/frontend-temp"
-          strip_components: 0
-          overwrite: true
+            # Copy everything from clh-backend to dist
+              sudo cp -r /home/${{ secrets.EC2_USERNAME }}/clh-backend/* /var/www/html/dist/
 
-      - name: 🚀 Deploy to /var/www/html and Restart NGINX
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
-          script: |
-            sudo mkdir -p /var/www/html
-            sudo rm -rf /var/www/html/*
-            sudo cp -r /home/${{ secrets.EC2_USERNAME }}/frontend-temp/* /var/www/html/
-            sudo systemctl restart nginx
+            # (Optional) Set proper permissions
+              sudo chown -R nginx:nginx /var/www/html/dist
