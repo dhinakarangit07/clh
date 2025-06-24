@@ -49,8 +49,6 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-          # Kill existing pm2 process if exists
-          pm2 delete django-app || true
 
           # Start Django with pm2 in background
           pm2 start manage.py --name django-app --interpreter ./venv/bin/python3 -- runserver 0.0.0.0:8000
