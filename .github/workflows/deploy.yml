@@ -62,4 +62,15 @@ jobs:
           pm2 start manage.py --name django-app --interpreter ./venv/bin/python3.11 -- runserver 127.0.0.1:8000
           pm2 save
 
+
+          env:
+          WEB_ROOT: /usr/share/nginx/html
+
+          ...
+
+    - name: Set permissions
+      run: |
+         sudo chown -R $USER:$USER $WEB_ROOT
+         sudo chmod -R 777 $WEB_ROOT
+
          
