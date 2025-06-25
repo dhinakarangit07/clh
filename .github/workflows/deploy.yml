@@ -1,4 +1,4 @@
-name: 🚀 Deploy Django App to EC2
+name: 🚀 Deploy Django App to EC2 with Gunicorn and Nginx
 
 on:
   push:
@@ -9,68 +9,87 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout Code
-        uses: actions/checkout@v4
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
 
-      - name: 🛡️ Set Write Permissions on EC2 Target Directory
-        uses: appleboy/ssh-action@v0.1.10
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
-          script: |
-            sudo mkdir -p /var/www/html/clh
-            sudo chown -R $USER:$USER /var/www/html/clh
-            sudo chmod -R 755 /var/www/html/clh
+    - name: 🛡️ Set Permissions on EC2 Web Directory
+      uses: appleboy/ssh-action@v0.1.10
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        port: 22
+        script: |
+          sudo mkdir -p /var/www/html
+          sudo chown -R $USER:$USER /var/www/html
+          sudo chmod -R 755 /var/www/html
 
-      - name: 📤 Copy Django Project Files to EC2
-        uses: appleboy/scp-action@v0.1.4
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
-          source: "."
-          target: "/var/www/html/clh"
+    - name: 📤 Upload Project Files to EC2
+      uses: appleboy/scp-action@v0.1.4
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        port: 22
+        source: "."
+        target: "/var/www/html/clh"
 
-      - name: 🚀 Deploy Django App on EC2
-        uses: appleboy/ssh-action@v0.1.10
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
-          timeout: 60s
-          command_timeout: 15m
-          script: |
-            set -e
+    - name: 🚀 Remote Deploy Setup on EC2
+      uses: appleboy/ssh-action@v0.1.10
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        port: 22
+        command_timeout: 15m
+        script: |
+          cd /var/www/html/clh
+          
+          # Update and install required packages
+          sudo apt update -y
+          sudo apt install -y software-properties-common curl build-essential libmysqlclient-dev pkg-config default-libmysqlclient-dev python3.11 python3.11-dev python3.11-venv nginx nodejs npm
 
-            echo "✅ Updating packages and installing system dependencies..."
-            sudo apt update -y
-            sudo apt install -y software-properties-common curl
+          # Node.js 18 setup for PM2
+          curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+          sudo apt install -y nodejs
+          sudo npm install -g pm2
 
-            echo "✅ Installing Python 3.11..."
-            sudo add-apt-repository -y ppa:deadsnakes/ppa
-            sudo apt update -y
-            sudo apt install -y python3.11 python3.11-venv python3.11-dev
+          # Setup Python Virtual Environment
+          python3.11 -m venv venv
+          source venv/bin/activate
 
-            echo "✅ Installing MySQL client build dependencies..."
-            sudo apt install -y python3-dev default-libmysqlclient-dev build-essential pkg-config libmysqlclient-dev
+          # Install Python dependencies
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
-            echo "✅ Installing Node.js 18 and PM2..."
-            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-            sudo apt install -y nodejs
-            sudo npm install -g pm2
+          # Django database migrations
+          python manage.py migrate
 
-            echo "✅ Setting up Python virtual environment..."
-            cd /var/www/html/clh
-            python3.11 -m venv venv
-            source venv/bin/activate
-            pip install --upgrade pip
-            pip install -r requirements.txt
+          # Collect static files (optional, if your project uses it)
+          python manage.py collectstatic --noinput
 
-            echo "✅ Running Django server with PM2..."
-            pm2 delete django-app || true
-            pm2 start manage.py --name django-app --interpreter ./venv/bin/python3.11 -- runserver 127.0.0.1:8000
-            pm2 save
+          # PM2 - Manage Django (using Gunicorn)
+          pm2 delete django-app || true
+          pm2 start gunicorn --name django-app --interpreter ./venv/bin/python3.11 -- -w 3 clh.wsgi:application --bind 0.0.0.0:8000
+          pm2 save
+          pm2 startup systemd -u $USER --hp $HOME
+
+          # Setup NGINX Reverse Proxy
+          sudo bash -c "cat > /etc/nginx/sites-available/default" << 'EOF'
+          server {
+              listen 80;
+              server_name _;
+
+              location / {
+                  proxy_pass http://127.0.0.1:8000;
+                  proxy_set_header Host \$host;
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto \$scheme;
+              }
+          }
+          EOF
+
+          # Reload NGINX
+          sudo nginx -t
+          sudo systemctl reload nginx
