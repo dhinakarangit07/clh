@@ -33,35 +33,31 @@ jobs:
         port: 22
         source: "."
         target: "/var/www/html/clh"
-
-    - name: 🚀 Setup Django + Nginx on EC2
+        
+    - name: SSH Deploy and Run Django
       uses: appleboy/ssh-action@v0.1.10
       with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USERNAME }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        port: 22
-        script: |
-          cd /var/www/html/clh
-
-          # Install Python, Node.js, Nginx
-          sudo apt update -y
-          sudo apt install -y python3.11 python3.11-venv nginx nodejs npm
-
-          # Setup virtualenv
-          python3.11 -m venv venv
-          source venv/bin/activate
-          pip install --upgrade pip
-          pip install -r requirements.txt
-
-          # Install pm2
-          sudo npm install -g pm2
-
-          # Start Django with pm2
-          pm2 delete django-app || true
-          pm2 start manage.py --name django-app --interpreter ./venv/bin/python3.11 -- runserver 127.0.0.1:8000
-          pm2 save
-
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            sudo apt update -y
+            sudo apt install -y software-properties-common curl
+            sudo add-apt-repository -y ppa:deadsnakes/ppa
+            sudo apt update -y
+            sudo apt install -y python3.11 python3.11-venv python3.11-dev
+            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+            sudo apt install -y nodejs
+            sudo npm install -g pm2
+            cd /var/www/html/clh
+            python3.11 -m venv venv
+            source venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            pm2 delete django-app || true
+            pm2 start manage.py --name django-app --interpreter ./venv/bin/python3.11 -- runserver 127.0.0.1:8000
+            pm2 save
 
           env:
           WEB_ROOT: /usr/share/nginx/html
