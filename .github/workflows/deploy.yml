@@ -20,7 +20,6 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
           script: |
-            # Allow your user to write into /var/www/html
             sudo mkdir -p /var/www/html
             sudo chown -R $USER:$USER /var/www/html
             sudo chmod -R 777 /var/www/html
@@ -42,22 +41,30 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
-          timeout: 30s
-          command_timeout: 10m
+          timeout: 60s
+          command_timeout: 15m
           script: |
+            set -e
+
+            # Install Python 3.11 and Node.js 18
             sudo apt update -y
             sudo apt install -y software-properties-common curl
             sudo add-apt-repository -y ppa:deadsnakes/ppa
             sudo apt update -y
             sudo apt install -y python3.11 python3.11-venv python3.11-dev
+
             curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
             sudo apt install -y nodejs
             sudo npm install -g pm2
+
+            # Setup and run Django
             cd /var/www/html/clh
             python3.11 -m venv venv
             source venv/bin/activate
             pip install --upgrade pip
             pip install -r requirements.txt
+
+            # Restart the Django app with PM2
             pm2 delete django-app || true
             pm2 start manage.py --name django-app --interpreter ./venv/bin/python3.11 -- runserver 127.0.0.1:8000
             pm2 save
