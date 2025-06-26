@@ -43,36 +43,54 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         port: 22
         script: |
-          # Update & install dependencies
+          # Install system dependencies
           sudo apt update -y
           sudo apt install -y python3.11 python3.11-venv python3.11-dev build-essential libmysqlclient-dev mysql-server nginx curl
+
+          # Install Node.js and PM2
           curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
           sudo apt install -y nodejs
           sudo npm install -g pm2
 
-          # Start MySQL if not running
+          # Start and enable MySQL
           sudo systemctl start mysql
           sudo systemctl enable mysql
+
+          # NGINX configuration for Django app
+          sudo bash -c 'cat > /etc/nginx/sites-available/clh' << EOF
+          server {
+              listen 80;
+              server_name ${13.204.63.89};
+
+              location / {
+                  proxy_pass http://13.204.63.89;
+                  proxy_set_header Host \$host;
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto \$scheme;
+              }
+          }
+          EOF
+          sudo ln -sf /etc/nginx/sites-available/clh /etc/nginx/sites-enabled/
+          sudo rm -f /etc/nginx/sites-enabled/default
+          sudo nginx -t
+          sudo systemctl reload nginx
 
           # Navigate to project
           cd /var/www/html/clh
 
-          # Python Virtual Environment
+          # Python Virtual Environment Setup
           python3.11 -m venv venv
           source venv/bin/activate
           pip install --upgrade pip
           pip install -r requirements.txt
 
-          # Django DB Migration
+          # Django Migrations and Collect Static Files
           python manage.py migrate
           python manage.py collectstatic --noinput
 
-          # PM2 Gunicorn Restart
+          # Start Gunicorn with PM2
           pm2 delete django-app || true
-          pm2 start venv/bin/gunicorn --name django-app --bind 0.0.0.0:8000 clh.wsgi:application
+          pm2 start venv/bin/gunicorn --name django-app -- --bind 0.0.0.0:8000 clh.wsgi:application
           pm2 save
           pm2 startup --silent
-
-          # Reload NGINX
-          sudo nginx -t
-          sudo systemctl restart nginx
