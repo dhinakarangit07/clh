@@ -43,33 +43,48 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         port: 22
         script: |
-          # Install system dependencies
+          # Install system packages
           sudo apt update -y
           sudo apt install -y python3.11 python3.11-venv python3.11-dev build-essential libmysqlclient-dev mysql-server nginx curl
 
-          # Install Node.js and PM2
+          # Install Node.js and PM2 for process management
           curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
           sudo apt install -y nodejs
           sudo npm install -g pm2
 
-          # Start MySQL
+          # Start MySQL and create Django DB and User
           sudo systemctl start mysql
           sudo systemctl enable mysql
-
-          # Create MySQL database and user (adjust DB name, user, password)
           sudo mysql -e "CREATE DATABASE IF NOT EXISTS clh_db CHARACTER SET UTF8MB4;"
           sudo mysql -e "CREATE USER IF NOT EXISTS 'clh_user'@'localhost' IDENTIFIED BY 'clh_password';"
           sudo mysql -e "GRANT ALL PRIVILEGES ON clh_db.* TO 'clh_user'@'localhost';"
           sudo mysql -e "FLUSH PRIVILEGES;"
 
-          # NGINX Configuration for Django
-          sudo bash -c 'cat > /etc/nginx/sites-available/clh' << EOF
+          # Django settings (ensure your settings.py reads from these DB creds!)
+          cd /var/www/html/clh
+          python3.11 -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+          # Django migrate and collectstatic
+          python manage.py migrate
+          python manage.py collectstatic --noinput
+
+          # PM2 + Gunicorn startup (Correct --bind usage)
+          pm2 delete django-app || true
+          pm2 start venv/bin/gunicorn --name django-app -- --bind 0.0.0.0:8000 clh.wsgi:application
+          pm2 save
+          pm2 startup --silent
+
+          # NGINX Configuration (Directly in conf.d, no sites-enabled/sites-available)
+          sudo bash -c 'cat > /etc/nginx/conf.d/clh.conf' << EOF
           server {
               listen 80;
-              server_name 13.204.63.89;
+              server_name _;
 
               location / {
-                  proxy_pass http://13.204.63.89;
+                  proxy_pass http://127.0.0.1:8000;
                   proxy_set_header Host \$host;
                   proxy_set_header X-Real-IP \$remote_addr;
                   proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -78,26 +93,5 @@ jobs:
           }
           EOF
 
-          sudo ln -sf /etc/nginx/sites-available/clh /etc/nginx/sites-enabled/
-          sudo rm -f /etc/nginx/sites-enabled/default
           sudo nginx -t
           sudo systemctl reload nginx
-
-          # Navigate to Django project
-          cd /var/www/html/clh
-
-          # Python virtual environment setup
-          python3.11 -m venv venv
-          source venv/bin/activate
-          pip install --upgrade pip
-          pip install -r requirements.txt
-
-          # Django migration and static files
-          python manage.py migrate
-          python manage.py collectstatic --noinput
-
-          # PM2 Gunicorn start
-          pm2 delete django-app || true
-          pm2 start venv/bin/gunicorn --name django-app -- --bind 0.0.0.0:8000 clh.wsgi:application
-          pm2 save
-          pm2 startup --silent
