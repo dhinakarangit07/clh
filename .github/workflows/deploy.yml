@@ -43,46 +43,57 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         port: 22
         script: |
-          # Install system packages
+          # Install dependencies
           sudo apt update -y
           sudo apt install -y python3.11 python3.11-venv python3.11-dev build-essential libmysqlclient-dev mysql-server nginx curl
 
-          # Install Node.js and PM2 for process management
+          # Node for PM2
           curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
           sudo apt install -y nodejs
           sudo npm install -g pm2
 
-          # Start MySQL and create Django DB and User
+          # Start MySQL
           sudo systemctl start mysql
           sudo systemctl enable mysql
-          sudo mysql -e "CREATE DATABASE IF NOT EXISTS clh_db CHARACTER SET UTF8MB4;"
+
+          # Setup MySQL user and db (skip errors if already exists)
+          sudo mysql -e "CREATE DATABASE IF NOT EXISTS clh_db CHARACTER SET UTF8;"
           sudo mysql -e "CREATE USER IF NOT EXISTS 'clh_user'@'localhost' IDENTIFIED BY 'clh_password';"
           sudo mysql -e "GRANT ALL PRIVILEGES ON clh_db.* TO 'clh_user'@'localhost';"
           sudo mysql -e "FLUSH PRIVILEGES;"
 
-          # Django settings (ensure your settings.py reads from these DB creds!)
+          # Python virtualenv
           cd /var/www/html/clh
           python3.11 -m venv venv
           source venv/bin/activate
           pip install --upgrade pip
           pip install -r requirements.txt
 
-          # Django migrate and collectstatic
+          # Update Django settings.py DB section (overwrite if needed)
+          sed -i "s/'NAME':.*/'NAME': 'clh_db',/" clh/settings.py
+          sed -i "s/'USER':.*/'USER': 'clh_user',/" clh/settings.py
+          sed -i "s/'PASSWORD':.*/'PASSWORD': 'clh_password',/" clh/settings.py
+          sed -i "s/'HOST':.*/'HOST': 'localhost',/" clh/settings.py
+          sed -i "s/'PORT':.*/'PORT': '3306',/" clh/settings.py
+
+          # Django Migrate & Collectstatic
           python manage.py migrate
           python manage.py collectstatic --noinput
 
-          # PM2 + Gunicorn startup (Correct --bind usage)
+          # Run Gunicorn via PM2 (correct command)
           pm2 delete django-app || true
-          pm2 start venv/bin/gunicorn --name django-app -- --bind 0.0.0.0:8000 clh.wsgi:application
+          pm2 start venv/bin/gunicorn --name django-app --bind 0.0.0.0:8000 clh.wsgi:application
           pm2 save
           pm2 startup --silent
 
-          # NGINX Configuration (Directly in conf.d, no sites-enabled/sites-available)
-          sudo bash -c 'cat > /etc/nginx/conf.d/clh.conf' << EOF
+          # NGINX config for Django
+          sudo bash -c 'cat > /etc/nginx/sites-available/clh <<EOF
           server {
               listen 80;
               server_name _;
-
+              location /static/ {
+                  alias /var/www/html/clh/static/;
+              }
               location / {
                   proxy_pass http://127.0.0.1:8000;
                   proxy_set_header Host \$host;
@@ -91,7 +102,9 @@ jobs:
                   proxy_set_header X-Forwarded-Proto \$scheme;
               }
           }
-          EOF
+          EOF'
 
+          sudo ln -sf /etc/nginx/sites-available/clh /etc/nginx/sites-enabled/clh
+          sudo rm -f /etc/nginx/sites-enabled/default
           sudo nginx -t
-          sudo systemctl reload nginx
+          sudo systemctl restart nginx
