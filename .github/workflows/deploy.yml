@@ -52,15 +52,21 @@ jobs:
           sudo apt install -y nodejs
           sudo npm install -g pm2
 
-          # Start and enable MySQL
+          # Start MySQL
           sudo systemctl start mysql
           sudo systemctl enable mysql
 
-          # NGINX configuration for Django app
+          # Create MySQL database and user (adjust DB name, user, password)
+          sudo mysql -e "CREATE DATABASE IF NOT EXISTS clh_db CHARACTER SET UTF8MB4;"
+          sudo mysql -e "CREATE USER IF NOT EXISTS 'clh_user'@'localhost' IDENTIFIED BY 'clh_password';"
+          sudo mysql -e "GRANT ALL PRIVILEGES ON clh_db.* TO 'clh_user'@'localhost';"
+          sudo mysql -e "FLUSH PRIVILEGES;"
+
+          # NGINX Configuration for Django
           sudo bash -c 'cat > /etc/nginx/sites-available/clh' << EOF
           server {
               listen 80;
-              server_name ${13.204.63.89};
+              server_name 13.204.63.89;
 
               location / {
                   proxy_pass http://13.204.63.89;
@@ -71,25 +77,26 @@ jobs:
               }
           }
           EOF
+
           sudo ln -sf /etc/nginx/sites-available/clh /etc/nginx/sites-enabled/
           sudo rm -f /etc/nginx/sites-enabled/default
           sudo nginx -t
           sudo systemctl reload nginx
 
-          # Navigate to project
+          # Navigate to Django project
           cd /var/www/html/clh
 
-          # Python Virtual Environment Setup
+          # Python virtual environment setup
           python3.11 -m venv venv
           source venv/bin/activate
           pip install --upgrade pip
           pip install -r requirements.txt
 
-          # Django Migrations and Collect Static Files
+          # Django migration and static files
           python manage.py migrate
           python manage.py collectstatic --noinput
 
-          # Start Gunicorn with PM2
+          # PM2 Gunicorn start
           pm2 delete django-app || true
           pm2 start venv/bin/gunicorn --name django-app -- --bind 0.0.0.0:8000 clh.wsgi:application
           pm2 save
